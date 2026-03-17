@@ -22,10 +22,11 @@ class GeneticAlgorithm:
     用于模拟"代际学习"场景。
     """
 
-    # 适应度权重（对应 age、energy、health）
-    FITNESS_AGE_WEIGHT: float = 0.4
-    FITNESS_ENERGY_WEIGHT: float = 0.3
-    FITNESS_HEALTH_WEIGHT: float = 0.3
+    # 适应度权重（对应 age、energy、health、offspring_count）
+    FITNESS_AGE_WEIGHT: float = 0.3
+    FITNESS_ENERGY_WEIGHT: float = 0.2
+    FITNESS_HEALTH_WEIGHT: float = 0.2
+    FITNESS_OFFSPRING_WEIGHT: float = 0.3  # 繁殖成功是进化的核心驱动力
 
     def __init__(self, mutation_rate: float = 0.1, elite_ratio: float = 0.2):
         """
@@ -52,10 +53,12 @@ class GeneticAlgorithm:
         Returns:
             float: 适应度分数（越高越好）
         """
+        offspring_score = getattr(organism, "offspring_count", 0) * self.FITNESS_OFFSPRING_WEIGHT
         return (
             organism.age * self.FITNESS_AGE_WEIGHT
             + organism.energy * self.FITNESS_ENERGY_WEIGHT
             + organism.health * self.FITNESS_HEALTH_WEIGHT
+            + offspring_score
         )
 
     def breed_brain(self, parent1_brain, parent2_brain):

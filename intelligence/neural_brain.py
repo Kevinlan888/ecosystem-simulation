@@ -58,7 +58,9 @@ class NeuralBrain(BaseBrain):
         for i in range(len(self.LAYER_SIZES) - 1):
             in_size = self.LAYER_SIZES[i]
             out_size = self.LAYER_SIZES[i + 1]
-            w = np.random.normal(0.0, 0.5, (in_size, out_size))
+            # Xavier 初始化：避免 tanh 激活下的梯度消失
+            std = np.sqrt(2.0 / (in_size + out_size))
+            w = np.random.normal(0.0, std, (in_size, out_size))
             weights.append(w)
         return weights
 

@@ -77,9 +77,13 @@ class Herbivore(Organism):
             if plants:
                 plant = random.choice(plants)
                 plant.apply_effect("health", -25.0)  # 消耗植物
-                self.apply_effect("energy", 20.0)    # 获得能量
+                # 大脑食物意愿越强，进食收益越高（10~30 energy）
+                gain = 10.0 + self.decisions[0] * 20.0
+                self.apply_effect("energy", gain)
 
         if self.decisions[2] <= 0.5 and self.reproduction_strategy and self.is_alive():
             if self.reproduction_strategy.can_reproduce(self):
-                offspring.extend(self.reproduction_strategy.reproduce(self, ecosystem))
+                new_kids = self.reproduction_strategy.reproduce(self, ecosystem)
+                self.offspring_count += len(new_kids)
+                offspring.extend(new_kids)
         return offspring

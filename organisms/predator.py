@@ -97,7 +97,9 @@ class Predator(Organism):
             if prey_list and random.random() < self.hunt_chance:
                 prey = random.choice(prey_list)
                 prey.apply_effect("health", -30.0)
-                self.apply_effect("energy", self.hunt_energy_gain)
+                # 大脑食物意愿越强，捕猎效率越高（0.75~1.25 倍基础收益）
+                gain = self.hunt_energy_gain * (0.75 + self.decisions[0] * 0.5)
+                self.apply_effect("energy", gain)
 
         # 饥饿惩罚：无猎物时每步额外扣血（模拟饿死），迫使捕食者随猎物减少而衰亡
         if self.is_alive() and not prey_list:
@@ -106,5 +108,7 @@ class Predator(Organism):
         # 繁殖必须有猎物存在（无食物来源无法支撑后代）
         if prey_list and self.reproduction_strategy and self.is_alive():
             if self.reproduction_strategy.can_reproduce(self):
-                offspring.extend(self.reproduction_strategy.reproduce(self, ecosystem))
+                new_kids = self.reproduction_strategy.reproduce(self, ecosystem)
+                self.offspring_count += len(new_kids)
+                offspring.extend(new_kids)
         return offspring

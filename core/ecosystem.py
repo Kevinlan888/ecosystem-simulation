@@ -116,9 +116,14 @@ class Ecosystem:
         # 7. 发布 tick_end 事件
         self.event_bus.publish("tick_end", {"tick": self.tick, "status": self.status()})
 
-        # 8. 每隔 evolve_interval 步执行一次种群进化
+        # 8. 每隔 evolve_interval 步执行一次种群进化（按物种分组，防止跨物种污染大脑）
         if self.tick % self.evolve_interval == 0 and len(self.organisms) > 2:
-            self.ga.evolve_population(self.organisms)
+            by_species: dict = {}
+            for org in self.organisms:
+                by_species.setdefault(org.name, []).append(org)
+            for group in by_species.values():
+                if len(group) > 1:
+                    self.ga.evolve_population(group)
             self.event_bus.publish("evolution_occurred", {
                 "tick": self.tick,
                 "population": len(self.organisms),

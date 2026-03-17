@@ -53,6 +53,7 @@ class Organism:
         self.fitness_score: float = 0.0
         self.decisions: list = [0.5, 0.5, 0.5, 0.5]
         self._resting: bool = False  # 标记本步是否休息（由 act() 设置）
+        self.offspring_count: int = 0  # 累计后代数量（用于适应度计算）
 
     # ------------------------------------------------------------------
     # 核心方法
@@ -76,17 +77,21 @@ class Organism:
         health_norm = self.health / 100.0
         age_ratio = self.age / max(1, self.max_age)
 
-        # 最近食物距离：以种群中植物比例近似（值越小表示食物越丰富，感知距离越近）
-        plants = [o for o in ecosystem.organisms if o.traits.get("is_plant", False) and o.is_alive()]
-        nearest_food = 1.0 - (len(plants) / max(1, len(ecosystem.organisms)))
-
-        # 最近捕食者距离：以种群中捕食者比例近似（值越小表示捕食者越多，威胁越大）
-        predators = [o for o in ecosystem.organisms if o.traits.get("is_predator", False) and o.is_alive()]
-        nearest_predator = 1.0 - (len(predators) / max(1, len(ecosystem.organisms)))
-
-        # 最近同类距离：以同名物种比例近似（值越小表示同类越多，越容易找到伴侣）
-        same_species = [o for o in ecosystem.organisms if o.name == self.name and o is not self and o.is_alive()]
-        nearest_mate = 1.0 - (len(same_species) / max(1, len(ecosystem.organisms)))
+        # 单次遍历同时统计植物、捕食者、同类数量（避免 O(3n) 的多次遍历）
+        plant_count = pred_count = same_count = 0
+        for o in ecosystem.organisms:
+            if not o.is_alive():
+                continue
+            if o.traits.get("is_plant", False):
+                plant_count += 1
+            if o.traits.get("is_predator", False):
+                pred_count += 1
+            if o.name == self.name and o is not self:
+                same_count += 1
+        total = max(1, len(ecosystem.organisms))
+        nearest_food = 1.0 - (plant_count / total)
+        nearest_predator = 1.0 - (pred_count / total)
+        nearest_mate = 1.0 - (same_count / total)
 
         # 当前温度（从环境因素中获取）
         temp_factor = next((f for f in ecosystem.factors if f.name == "temperature"), None)
@@ -153,7 +158,9 @@ class Organism:
         if d[2] > 0.5 and not self.traits.get("is_predator", False):
             if self.reproduction_strategy and self.is_alive():
                 if self.reproduction_strategy.can_reproduce(self):
-                    offspring.extend(self.reproduction_strategy.reproduce(self, ecosystem))
+                    new_kids = self.reproduction_strategy.reproduce(self, ecosystem)
+                    self.offspring_count += len(new_kids)
+                    offspring.extend(new_kids)
 
         # 休息：标记本步休息，step() 中将能耗减半
         self._resting = d[3] > 0.5

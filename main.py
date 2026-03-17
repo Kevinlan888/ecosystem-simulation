@@ -25,13 +25,32 @@ from organisms.predator import Predator
 
 def make_tick_handler(eco):
     """创建 tick_end 回调（闭包，捕获 eco 以实现迁入救援机制）。"""
+    prev_species: dict = {}
+
     def on_tick_end(event_name: str, data: dict) -> None:
+        nonlocal prev_species
         status = data["status"]
         tick = status["tick"]
         total = status["total"]
         species = status["species"]
         species_str = ", ".join(f"{k}: {v}" for k, v in sorted(species.items()))
         print(f"[Tick {tick:>3}] 总生物数: {total:>4} | {species_str}")
+
+        # 检测种群显著变化事件（跳过第一个 tick，prev 为空无意义）
+        if prev_species:
+            all_names = set(prev_species) | set(species)
+            for name in all_names:
+                prev = prev_species.get(name, 0)
+                curr = species.get(name, 0)
+                if prev > 0 and curr == 0:
+                    print(f"  ⚠️  [灭绝] {name} 在 Tick {tick} 全部死亡！")
+                elif prev == 0 and curr > 0:
+                    print(f"  🌱 [复苏] {name} 重新出现，当前数量: {curr}")
+                elif prev > 0 and curr <= prev * 0.4:
+                    print(f"  📉 [骤降] {name}: {prev} → {curr}（本轮减少 {prev - curr}）")
+                elif prev > 0 and curr >= prev * 2.5:
+                    print(f"  📈 [爆发] {name}: {prev} → {curr}（本轮增加 {curr - prev}）")
+        prev_species = dict(species)
 
         # 迁入救援机制：种群濒危时模拟外部个体迁入，防止永久灭绝
         if species.get("Plant", 0) < 5:
@@ -43,6 +62,24 @@ def make_tick_handler(eco):
         if species.get("Predator", 0) < 2:
             eco.organisms.append(Predator(hunt_chance=0.25))
     return on_tick_end
+
+
+def make_evolution_handler(eco):
+    """创建 evolution_occurred 回调，打印每个物种的进化统计信息。"""
+    def on_evolution(event_name: str, data: dict) -> None:
+        tick = data["tick"]
+        by_species: dict = {}
+        for org in eco.organisms:
+            by_species.setdefault(org.name, []).append(org)
+
+        lines = []
+        for name, group in sorted(by_species.items()):
+            scores = [o.fitness_score for o in group]
+            avg = sum(scores) / len(scores)
+            best = max(scores)
+            lines.append(f"{name}({len(group)}只) avg={avg:.1f} best={best:.1f}")
+        print(f"  🧬 [进化] Tick {tick} | " + " | ".join(lines))
+    return on_evolution
 
 
 def main():
@@ -72,8 +109,9 @@ def main():
     print(f"初始状态: {eco.status()}")
     print("-" * 60)
 
-    # 4. 订阅 tick_end 事件
+    # 4. 订阅事件
     eco.event_bus.subscribe("tick_end", make_tick_handler(eco))
+    eco.event_bus.subscribe("evolution_occurred", make_evolution_handler(eco))
 
     # 5. 无限运行，直到 Ctrl+C
     print("按 Ctrl+C 停止模拟...\n")

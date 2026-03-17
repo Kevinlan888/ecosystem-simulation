@@ -17,8 +17,8 @@ class NoBrain(BaseBrain):
     """
 
     def decide(self, inputs: list) -> list:
-        """返回中立决策（全部 0.5）。"""
-        return [0.5, 0.5, 0.5, 0.5]
+        """返回中立决策（全部 0.0，不触发任何行为）。"""
+        return [0.0, 0.0, 0.0, 0.0]
 
     def clone(self) -> "NoBrain":
         """克隆无智慧大脑（直接返回新实例）。"""
