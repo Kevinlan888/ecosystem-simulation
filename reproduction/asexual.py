@@ -5,6 +5,7 @@
 """
 
 from __future__ import annotations
+import random
 from core.interfaces import ReproductionStrategy
 
 
@@ -41,6 +42,16 @@ class AsexualReproduction(ReproductionStrategy):
         """
         offspring_energy = organism.energy / 2
         organism.apply_effect("energy", -offspring_energy)
+
+        # 种群密度限制：同类过多时概率性抑制分裂（防止植物爆炸式增长挤占资源）
+        same_count = sum(
+            1 for o in ecosystem.organisms
+            if o.name == organism.name and o.is_alive()
+        )
+        total_count = max(1, len(ecosystem.organisms))
+        density_ratio = same_count / total_count
+        if density_ratio > 0.6 and random.random() < density_ratio:
+            return []  # 密度过高时抑制繁殖
 
         # 创建同类新生物（traits 完整继承）
         offspring = organism.__class__(

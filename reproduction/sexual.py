@@ -5,6 +5,7 @@
 """
 
 from __future__ import annotations
+import random
 from core.interfaces import ReproductionStrategy
 
 
@@ -54,6 +55,22 @@ class SexualReproduction(ReproductionStrategy):
         )
         if partner is None:
             return []
+
+        # 食物感知：人均食物越少，繁殖意愿越低（模拟老鼠等动物的饥荒抑制机制）
+        food_factor = next(
+            (f for f in ecosystem.factors if f.name == "food_supply"), None
+        )
+        if food_factor is not None:
+            same_species_count = sum(
+                1 for o in ecosystem.organisms
+                if o.name == organism.name and o.is_alive()
+            )
+            food_per_individual = food_factor.food_amount / max(1, same_species_count)
+            if food_per_individual < 10:
+                return []          # 极度饥荒：完全停止繁殖
+            elif food_per_individual < 30:
+                if random.random() > food_per_individual / 30:
+                    return []      # 食物不足：概率性抑制繁殖
 
         # 双亲各消耗 20 点能量
         organism.apply_effect("energy", -20)

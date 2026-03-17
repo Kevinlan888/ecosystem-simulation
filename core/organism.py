@@ -149,8 +149,8 @@ class Organism:
             if predators:
                 self.apply_effect("health", 3.0)
 
-        # 寻找伴侣：主动触发繁殖
-        if d[2] > 0.5:
+        # 寻找伴侣：主动触发繁殖（捕食者在 Predator.step() 中单独处理，此处跳过）
+        if d[2] > 0.5 and not self.traits.get("is_predator", False):
             if self.reproduction_strategy and self.is_alive():
                 if self.reproduction_strategy.can_reproduce(self):
                     offspring.extend(self.reproduction_strategy.reproduce(self, ecosystem))

@@ -87,19 +87,24 @@ class Predator(Organism):
         self._resting = False
         self.apply_effect("energy", -energy_cost)
 
-        # 尝试捕猎草食动物
-        if self.is_alive():
-            prey_list = [
-                o for o in ecosystem.organisms
-                if o.traits.get("is_herbivore", False) and o.is_alive()
-            ]
+        prey_list = [
+            o for o in ecosystem.organisms
+            if o.traits.get("is_herbivore", False) and o.is_alive()
+        ]
+
+        # 核心机制：只在饥饿时捕猎（饱食后停止，防止将猎物全部捕杀）
+        if self.is_alive() and self.energy < 65:
             if prey_list and random.random() < self.hunt_chance:
                 prey = random.choice(prey_list)
-                # 捕食：猎物失去大量健康，捕食者获得能量
-                prey.apply_effect("health", -50.0)
+                prey.apply_effect("health", -30.0)
                 self.apply_effect("energy", self.hunt_energy_gain)
 
-        if self.reproduction_strategy and self.is_alive():
+        # 饥饿惩罚：无猎物时每步额外扣血（模拟饿死），迫使捕食者随猎物减少而衰亡
+        if self.is_alive() and not prey_list:
+            self.apply_effect("health", -3.0)
+
+        # 繁殖必须有猎物存在（无食物来源无法支撑后代）
+        if prey_list and self.reproduction_strategy and self.is_alive():
             if self.reproduction_strategy.can_reproduce(self):
                 offspring.extend(self.reproduction_strategy.reproduce(self, ecosystem))
         return offspring

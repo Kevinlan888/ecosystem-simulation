@@ -47,12 +47,15 @@ class FoodSupplyFactor(EnvironmentalFactor):
 
     def update(self, ecosystem) -> None:
         """
-        每步食物再生（不超过上限）。
+        每步食物再生：再生量与植物数量正相关（更多植物 → 更多食物），不超过上限。
 
         Args:
             ecosystem: 当前生态系统实例
         """
-        self.food_amount = min(self.max_food, self.food_amount + self.regen_rate)
+        plant_count = sum(1 for o in ecosystem.organisms if o.traits.get("is_plant", False) and o.is_alive())
+        # 植物越多食物再生越快，最低保底 regen_rate * 0.2
+        scale = max(0.2, plant_count / max(1, len(ecosystem.organisms)))
+        self.food_amount = min(self.max_food, self.food_amount + self.regen_rate * scale)
 
     def apply(self, organism, ecosystem) -> None:
         """
