@@ -29,6 +29,7 @@ class Organism:
         reproduction_strategy=None,
         traits: dict | None = None,
         brain=None,
+        speed: float = 0.0,
     ):
         """
         初始化生物实例。
@@ -41,6 +42,7 @@ class Organism:
             reproduction_strategy: 繁殖策略实例（ReproductionStrategy 子类）
             traits: 生物特征字典，用于环境因素判断
             brain: 大脑实例（BaseBrain 子类），默认使用 NoBrain
+            speed: 每步最大移动距离（植物=0，草食=2，捕食者=3）
         """
         self.name: str = name
         self.age: int = 0
@@ -54,6 +56,9 @@ class Organism:
         self.decisions: list = [0.5, 0.5, 0.5, 0.5]
         self._resting: bool = False  # 标记本步是否休息（由 act() 设置）
         self.offspring_count: int = 0  # 累计后代数量（用于适应度计算）
+        self.x: float | None = None    # 空间坐标（由 Ecosystem.add_organism 初始化）
+        self.y: float | None = None
+        self.speed: float = speed      # 每步最大移动距离（plants=0 不移动）
 
     # ------------------------------------------------------------------
     # 核心方法
@@ -72,26 +77,34 @@ class Organism:
         Returns:
             list: 长度为 8 的感知输入向量
         """
-        # 自身状态（归一化）
+        import math
         energy_norm = self.energy / 100.0
         health_norm = self.health / 100.0
         age_ratio = self.age / max(1, self.max_age)
 
-        # 单次遍历同时统计植物、捕食者、同类数量（避免 O(3n) 的多次遍历）
-        plant_count = pred_count = same_count = 0
+        w, h = ecosystem.world_size
+        world_diag = math.hypot(w, h)
+        # 捕食者以草食动物为食，其余以植物为食
+        food_trait = "is_herbivore" if self.traits.get("is_predator", False) else "is_plant"
+        min_food_d = min_pred_d = min_mate_d = world_diag
+
+        # 单次遍历，按空间距离计算最近食物/捕食者/同类
+        cx = self.x if self.x is not None else w / 2
+        cy = self.y if self.y is not None else h / 2
         for o in ecosystem.organisms:
-            if not o.is_alive():
+            if not o.is_alive() or o is self or o.x is None:
                 continue
-            if o.traits.get("is_plant", False):
-                plant_count += 1
-            if o.traits.get("is_predator", False):
-                pred_count += 1
-            if o.name == self.name and o is not self:
-                same_count += 1
-        total = max(1, len(ecosystem.organisms))
-        nearest_food = 1.0 - (plant_count / total)
-        nearest_predator = 1.0 - (pred_count / total)
-        nearest_mate = 1.0 - (same_count / total)
+            d = math.hypot(o.x - cx, o.y - cy)
+            if o.traits.get(food_trait, False) and d < min_food_d:
+                min_food_d = d
+            if o.traits.get("is_predator", False) and d < min_pred_d:
+                min_pred_d = d
+            if o.name == self.name and d < min_mate_d:
+                min_mate_d = d
+
+        nearest_food = min_food_d / world_diag
+        nearest_predator = min_pred_d / world_diag
+        nearest_mate = min_mate_d / world_diag
 
         # 当前温度（从环境因素中获取）
         temp_factor = next((f for f in ecosystem.factors if f.name == "temperature"), None)
@@ -159,13 +172,71 @@ class Organism:
             if self.reproduction_strategy and self.is_alive():
                 if self.reproduction_strategy.can_reproduce(self):
                     new_kids = self.reproduction_strategy.reproduce(self, ecosystem)
+                    self._place_offspring(new_kids, ecosystem)
                     self.offspring_count += len(new_kids)
                     offspring.extend(new_kids)
 
         # 休息：标记本步休息，step() 中将能耗减半
         self._resting = d[3] > 0.5
 
+        self._move(ecosystem)
         return offspring
+
+    def _place_offspring(self, offspring: list, ecosystem: "Ecosystem") -> None:
+        """将后代随机放置在父代附近（±3 单位），限制在世界边界内。"""
+        import random
+        if self.x is None:
+            return
+        w, h = ecosystem.world_size
+        for kid in offspring:
+            kid.x = max(0.0, min(w, self.x + random.uniform(-3.0, 3.0)))
+            kid.y = max(0.0, min(h, self.y + random.uniform(-3.0, 3.0)))
+
+    def _move(self, ecosystem: "Ecosystem") -> None:
+        """根据 decisions 在世界空间中移动；speed=0 的生物（如植物）直接跳过。"""
+        import math
+        import random
+        if self.speed <= 0 or self.x is None:
+            return
+        d = self.decisions
+        w, h = ecosystem.world_size
+        dx = dy = 0.0
+        food_trait = "is_herbivore" if self.traits.get("is_predator", False) else "is_plant"
+
+        # decisions[0] > 0.5: 趋向最近食物
+        if d[0] > 0.5:
+            best, best_dist = None, float("inf")
+            for o in ecosystem.organisms:
+                if o.traits.get(food_trait, False) and o.is_alive() and o.x is not None:
+                    od = math.hypot(o.x - self.x, o.y - self.y)
+                    if od < best_dist:
+                        best, best_dist = o, od
+            if best is not None and best_dist > 0:
+                scale = (d[0] - 0.5) * 2.0 * self.speed
+                dx += (best.x - self.x) / best_dist * scale
+                dy += (best.y - self.y) / best_dist * scale
+
+        # decisions[1] > 0.5: 逃离最近捕食者
+        if d[1] > 0.5:
+            best, best_dist = None, float("inf")
+            for o in ecosystem.organisms:
+                if o.traits.get("is_predator", False) and o.is_alive() and o is not self and o.x is not None:
+                    od = math.hypot(o.x - self.x, o.y - self.y)
+                    if od < best_dist:
+                        best, best_dist = o, od
+            if best is not None and best_dist > 0:
+                scale = (d[1] - 0.5) * 2.0 * self.speed
+                dx -= (best.x - self.x) / best_dist * scale
+                dy -= (best.y - self.y) / best_dist * scale
+
+        # 无明确方向时随机游走
+        if abs(dx) < 0.01 and abs(dy) < 0.01:
+            angle = random.uniform(0.0, 6.2832)
+            dx = math.cos(angle) * self.speed * 0.3
+            dy = math.sin(angle) * self.speed * 0.3
+
+        self.x = max(0.0, min(w, self.x + dx))
+        self.y = max(0.0, min(h, self.y + dy))
 
     def step(self, ecosystem: "Ecosystem") -> list:
         """

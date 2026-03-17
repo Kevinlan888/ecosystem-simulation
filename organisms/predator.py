@@ -58,6 +58,7 @@ class Predator(Organism):
                 "is_predator": True,
             },
             brain=brain if brain is not None else NeuralBrain(),
+            speed=3.0,
         )
         self.hunt_energy_gain = hunt_energy_gain
         self.hunt_chance = hunt_chance
@@ -74,6 +75,7 @@ class Predator(Organism):
         Returns:
             list: 本步产生的新生捕食者列表
         """
+        import math
         import random
 
         # 1. 感知与决策
@@ -91,11 +93,16 @@ class Predator(Organism):
             o for o in ecosystem.organisms
             if o.traits.get("is_herbivore", False) and o.is_alive()
         ]
+        # 核心机制：只捕猎 hunt_radius 内的猎物（需要靠近才能捕食）
+        hunt_radius = 10.0
+        nearby_prey = [
+            o for o in prey_list
+            if o.x is not None and math.hypot(o.x - self.x, o.y - self.y) <= hunt_radius
+        ]
 
-        # 核心机制：只在饥饿时捕猎（饱食后停止，防止将猎物全部捕杀）
         if self.is_alive() and self.energy < 65:
-            if prey_list and random.random() < self.hunt_chance:
-                prey = random.choice(prey_list)
+            if nearby_prey and random.random() < self.hunt_chance:
+                prey = min(nearby_prey, key=lambda o: math.hypot(o.x - self.x, o.y - self.y))
                 prey.apply_effect("health", -30.0)
                 # 大脑食物意愿越强，捕猎效率越高（0.75~1.25 倍基础收益）
                 gain = self.hunt_energy_gain * (0.75 + self.decisions[0] * 0.5)
@@ -109,6 +116,7 @@ class Predator(Organism):
         if prey_list and self.reproduction_strategy and self.is_alive():
             if self.reproduction_strategy.can_reproduce(self):
                 new_kids = self.reproduction_strategy.reproduce(self, ecosystem)
+                self._place_offspring(new_kids, ecosystem)
                 self.offspring_count += len(new_kids)
                 offspring.extend(new_kids)
         return offspring

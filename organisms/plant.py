@@ -68,4 +68,5 @@ class Plant(Organism):
         if self.reproduction_strategy and self.is_alive():
             if self.reproduction_strategy.can_reproduce(self):
                 offspring = self.reproduction_strategy.reproduce(self, ecosystem)
+                self._place_offspring(offspring, ecosystem)
         return offspring

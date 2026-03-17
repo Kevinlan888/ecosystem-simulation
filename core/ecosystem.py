@@ -19,12 +19,13 @@ class Ecosystem:
     负责协调所有生物和环境因素，驱动时间步进。
     """
 
-    def __init__(self, evolve_interval: int = 20):
+    def __init__(self, evolve_interval: int = 20, world_size: tuple = (100.0, 100.0)):
         """
         初始化一个空的生态系统。
 
         Args:
             evolve_interval: 每隔多少步执行一次种群进化（遗传算法）
+            world_size: 世界空间尺寸 (width, height)，用于生物空间定位和可视化
         """
         self.organisms: list = []
         self.factors: list = []
@@ -32,6 +33,7 @@ class Ecosystem:
         self.event_bus: EventBus = EventBus()
         self.ga: GeneticAlgorithm = GeneticAlgorithm()
         self.evolve_interval: int = evolve_interval
+        self.world_size: tuple = world_size
 
     # ------------------------------------------------------------------
     # 管理接口
@@ -39,11 +41,15 @@ class Ecosystem:
 
     def add_organism(self, organism) -> None:
         """
-        向生态系统添加一个生物。
+        向生态系统添加一个生物。未设置位置的生物将在世界范围内随机放置。
 
         Args:
             organism: Organism 实例
         """
+        import random
+        if organism.x is None:
+            organism.x = random.uniform(0.0, self.world_size[0])
+            organism.y = random.uniform(0.0, self.world_size[1])
         self.organisms.append(organism)
         self.event_bus.publish("organism_born", {"organism": organism})
 

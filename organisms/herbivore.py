@@ -4,6 +4,7 @@
 草食动物通过食物供应获取能量，使用有性繁殖策略。
 """
 
+import math
 import random
 
 from core.organism import Organism
@@ -56,6 +57,7 @@ class Herbivore(Organism):
                 "is_herbivore": True,
             },
             brain=brain if brain is not None else NeuralBrain(),
+            speed=2.0,
         )
 
     def step(self, ecosystem) -> list:
@@ -68,15 +70,18 @@ class Herbivore(Organism):
         self._resting = False
         self.apply_effect("energy", -energy_cost)
 
-        # 核心机制：饥饿时主动进食植物，直接消耗植物健康值（真实食物链耦合）
+        # 核心机制：饥饿时进食 eat_radius 内最近的植物（空间耦合）
+        eat_radius = 8.0
         if self.energy < 70 and self.is_alive():
-            plants = [
+            nearby_plants = [
                 o for o in ecosystem.organisms
                 if o.traits.get("is_plant", False) and o.is_alive()
+                and o.x is not None
+                and math.hypot(o.x - self.x, o.y - self.y) <= eat_radius
             ]
-            if plants:
-                plant = random.choice(plants)
-                plant.apply_effect("health", -25.0)  # 消耗植物
+            if nearby_plants:
+                plant = min(nearby_plants, key=lambda o: math.hypot(o.x - self.x, o.y - self.y))
+                plant.apply_effect("health", -25.0)
                 # 大脑食物意愿越强，进食收益越高（10~30 energy）
                 gain = 10.0 + self.decisions[0] * 20.0
                 self.apply_effect("energy", gain)
@@ -84,6 +89,7 @@ class Herbivore(Organism):
         if self.decisions[2] <= 0.5 and self.reproduction_strategy and self.is_alive():
             if self.reproduction_strategy.can_reproduce(self):
                 new_kids = self.reproduction_strategy.reproduce(self, ecosystem)
+                self._place_offspring(new_kids, ecosystem)
                 self.offspring_count += len(new_kids)
                 offspring.extend(new_kids)
         return offspring

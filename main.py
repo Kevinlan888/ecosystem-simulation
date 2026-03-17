@@ -55,12 +55,12 @@ def make_tick_handler(eco):
         # 迁入救援机制：种群濒危时模拟外部个体迁入，防止永久灭绝
         if species.get("Plant", 0) < 5:
             for _ in range(3):
-                eco.organisms.append(Plant())
+                eco.add_organism(Plant())
         if species.get("Herbivore", 0) < 3:
             for _ in range(2):
-                eco.organisms.append(Herbivore())
+                eco.add_organism(Herbivore())
         if species.get("Predator", 0) < 2:
-            eco.organisms.append(Predator(hunt_chance=0.25))
+            eco.add_organism(Predator(hunt_chance=0.25))
     return on_tick_end
 
 
@@ -98,13 +98,13 @@ def main():
     eco.add_factor(LightFactor(day_length=12, energy_gain=4.0, energy_loss=1.0))
     eco.add_factor(DiseaseFactor(infection_rate=0.02, damage=1.0, recovery_chance=0.2))
 
-    # 3. 添加生物（不通过事件总线打印，避免启动时刷屏）
+    # 3. 添加生物（通过 add_organism 确保空间坐标被正确初始化）
     for _ in range(10):
-        eco.organisms.append(Plant())
+        eco.add_organism(Plant())
     for _ in range(8):
-        eco.organisms.append(Herbivore())
+        eco.add_organism(Herbivore())
     for _ in range(3):
-        eco.organisms.append(Predator(hunt_chance=0.25))
+        eco.add_organism(Predator(hunt_chance=0.25))
 
     print(f"初始状态: {eco.status()}")
     print("-" * 60)
