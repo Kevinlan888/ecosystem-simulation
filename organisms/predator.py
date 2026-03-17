@@ -6,6 +6,7 @@
 
 from core.organism import Organism
 from reproduction.sexual import SexualReproduction
+from intelligence.neural_brain import NeuralBrain
 
 
 class Predator(Organism):
@@ -15,6 +16,7 @@ class Predator(Organism):
     - traits: min_temp=-5, max_temp=40, is_plant=False, is_predator=True
     - 繁殖策略: 有性繁殖
     - 能量来源: 捕食草食动物获得能量（在 step() 中实现捕食逻辑）
+    - 大脑: 默认携带 NeuralBrain，支持神经网络决策
     """
 
     def __init__(
@@ -27,6 +29,7 @@ class Predator(Organism):
         traits: dict | None = None,
         hunt_energy_gain: float = 30.0,
         hunt_chance: float = 0.4,
+        brain=None,
     ):
         """
         初始化捕食者实例。
@@ -40,6 +43,7 @@ class Predator(Organism):
             traits: 生物特征字典（默认捕食者特征）
             hunt_energy_gain: 成功捕猎后获得的能量值
             hunt_chance: 每步捕猎成功概率
+            brain: 大脑实例（默认 NeuralBrain）
         """
         super().__init__(
             name=name,
@@ -53,13 +57,16 @@ class Predator(Organism):
                 "is_plant": False,
                 "is_predator": True,
             },
+            brain=brain if brain is not None else NeuralBrain(),
         )
         self.hunt_energy_gain = hunt_energy_gain
         self.hunt_chance = hunt_chance
 
     def step(self, ecosystem) -> list:
         """
-        捕食者的时间步：增龄、消耗能量、尝试捕猎、尝试繁殖。
+        捕食者的时间步：感知、决策、行动、增龄、消耗能量、尝试捕猎、尝试繁殖。
+
+        在原有捕猎逻辑之前插入大脑驱动的 think() 和 act()。
 
         Args:
             ecosystem: 当前生态系统实例
@@ -69,9 +76,16 @@ class Predator(Organism):
         """
         import random
 
+        # 1. 感知与决策
+        self.think(ecosystem)
+        # 2. 执行行动（act 可能产生后代）
+        offspring = self.act(ecosystem)
+
         self.age += 1
-        # 基础能量消耗
-        self.apply_effect("energy", -1.5)
+        # 基础能量消耗（休息时减半）
+        energy_cost = 0.75 if getattr(self, "_resting", False) else 1.5
+        self._resting = False
+        self.apply_effect("energy", -energy_cost)
 
         # 尝试捕猎草食动物
         if self.is_alive():
@@ -85,8 +99,7 @@ class Predator(Organism):
                 prey.apply_effect("health", -50.0)
                 self.apply_effect("energy", self.hunt_energy_gain)
 
-        offspring = []
         if self.reproduction_strategy and self.is_alive():
             if self.reproduction_strategy.can_reproduce(self):
-                offspring = self.reproduction_strategy.reproduce(self, ecosystem)
+                offspring.extend(self.reproduction_strategy.reproduce(self, ecosystem))
         return offspring

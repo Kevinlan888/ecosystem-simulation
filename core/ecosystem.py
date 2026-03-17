@@ -9,6 +9,7 @@ Ecosystem 驱动整个模拟的每一个时间步：
 
 from __future__ import annotations
 from events.event_bus import EventBus
+from intelligence.genetic_algorithm import GeneticAlgorithm
 
 
 class Ecosystem:
@@ -18,12 +19,19 @@ class Ecosystem:
     负责协调所有生物和环境因素，驱动时间步进。
     """
 
-    def __init__(self):
-        """初始化一个空的生态系统。"""
+    def __init__(self, evolve_interval: int = 20):
+        """
+        初始化一个空的生态系统。
+
+        Args:
+            evolve_interval: 每隔多少步执行一次种群进化（遗传算法）
+        """
         self.organisms: list = []
         self.factors: list = []
         self.tick: int = 0
         self.event_bus: EventBus = EventBus()
+        self.ga: GeneticAlgorithm = GeneticAlgorithm()
+        self.evolve_interval: int = evolve_interval
 
     # ------------------------------------------------------------------
     # 管理接口
@@ -107,6 +115,14 @@ class Ecosystem:
 
         # 7. 发布 tick_end 事件
         self.event_bus.publish("tick_end", {"tick": self.tick, "status": self.status()})
+
+        # 8. 每隔 evolve_interval 步执行一次种群进化
+        if self.tick % self.evolve_interval == 0 and len(self.organisms) > 2:
+            self.ga.evolve_population(self.organisms)
+            self.event_bus.publish("evolution_occurred", {
+                "tick": self.tick,
+                "population": len(self.organisms),
+            })
 
     def run(self, steps: int) -> None:
         """
