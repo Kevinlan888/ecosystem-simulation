@@ -6,6 +6,7 @@
 
 from core.organism import Organism
 from reproduction.sexual import SexualReproduction
+from intelligence.neural_brain import NeuralBrain
 
 
 class Herbivore(Organism):
@@ -15,6 +16,7 @@ class Herbivore(Organism):
     - traits: min_temp=0, max_temp=35, is_plant=False, is_herbivore=True
     - 繁殖策略: 有性繁殖（周围有同类时繁殖）
     - 能量来源: 通过食物供应因素获得能量（见 FoodSupplyFactor）
+    - 大脑: 默认携带 NeuralBrain，支持神经网络决策
     """
 
     def __init__(
@@ -25,6 +27,7 @@ class Herbivore(Organism):
         max_age: int = 40,
         reproduction_strategy=None,
         traits: dict | None = None,
+        brain=None,
     ):
         """
         初始化草食动物实例。
@@ -36,6 +39,7 @@ class Herbivore(Organism):
             max_age: 最大寿命
             reproduction_strategy: 繁殖策略（默认有性繁殖）
             traits: 生物特征字典（默认草食动物特征）
+            brain: 大脑实例（默认 NeuralBrain）
         """
         super().__init__(
             name=name,
@@ -49,4 +53,5 @@ class Herbivore(Organism):
                 "is_plant": False,
                 "is_herbivore": True,
             },
+            brain=brain if brain is not None else NeuralBrain(),
         )
