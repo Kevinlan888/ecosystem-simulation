@@ -13,6 +13,7 @@
 import time
 
 DAYS_PER_YEAR = 365
+MC_DAY_TICKS  = 200   # 1 Minecraft day = 200 sim ticks
 
 from core.ecosystem import Ecosystem
 from factors.temperature import TemperatureFactor
@@ -37,8 +38,11 @@ def make_tick_handler(eco):
         species = status["species"]
         year = tick // DAYS_PER_YEAR
         day  = tick % DAYS_PER_YEAR
+        mc_day  = tick // MC_DAY_TICKS
+        mc_time = (tick % MC_DAY_TICKS) * 24000 // MC_DAY_TICKS
+        phase = "☀ Day" if 6000 <= mc_time < 18000 else "☾ Night"
         species_str = ", ".join(f"{k}: {v}" for k, v in sorted(species.items()))
-        print(f"[Year {year:>3} Day {day:>3}] 总生物数: {total:>4} | {species_str}")
+        print(f"[Day {mc_day:>4} T:{mc_time:>5} {phase}] 生物: {total:>4} | {species_str}")
 
         # 检测种群显著变化事件
         if prev_species:
@@ -96,10 +100,10 @@ def main():
     eco = Ecosystem()
 
     # 2. 添加环境因素
-    eco.add_factor(TemperatureFactor(base_temp=20.0, amplitude=15.0, period=365))
+    eco.add_factor(TemperatureFactor(base_temp=20.0, amplitude=15.0, period=MC_DAY_TICKS * 20))
     eco.add_factor(FoodSupplyFactor(initial_food=500.0, regen_rate=30.0, max_food=800.0, consumption_per_animal=3.0, energy_penalty=3.0))
     eco.add_factor(WaterFactor(initial_level=200.0, regen_rate=8.0, max_level=400.0))
-    eco.add_factor(LightFactor(day_length=12, energy_gain=4.0, energy_loss=1.0))
+    eco.add_factor(LightFactor(day_length=MC_DAY_TICKS // 2, energy_gain=4.0, energy_loss=1.0))
     eco.add_factor(DiseaseFactor(infection_rate=0.02, damage=1.0, recovery_chance=0.2))
 
     # 3. 添加生物（通过 add_organism 确保空间坐标被正确初始化）
@@ -136,15 +140,16 @@ def main():
     try:
         while True:
             eco.step()
-            time.sleep(0.5)  # 每步暂停 0.5 秒，可调整
+            time.sleep(1 / 20)  # 20 TPS, Minecraft 标准：50ms/tick
     except KeyboardInterrupt:
         print("\n\n模拟已中断。")
 
     # 6. 打印最终状态
     print("=" * 60)
     final = eco.status()
+    mc_day_final = final['tick'] // MC_DAY_TICKS
     print("🏁 最终状态:")
-    print(f"  总 Tick 数: {final['tick']}")
+    print(f"  总 Tick 数: {final['tick']} (MC Day {mc_day_final})")
     print(f"  存活生物数: {final['total']}")
     print("  各物种数量:")
     for species, count in sorted(final["species"].items()):

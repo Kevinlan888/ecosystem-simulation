@@ -13,6 +13,8 @@ if TYPE_CHECKING:
 from intelligence.no_brain import NoBrain
 from core import name_registry as _name_registry
 
+_MC_DAY_TICKS = 200  # 与 main.py / visualizer.py 保持一致
+
 
 class Organism:
     """
@@ -301,9 +303,9 @@ class Organism:
     # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
-        age_years = self.age // 365
-        age_days  = self.age % 365
-        age_str   = f"{age_years}y{age_days}d" if age_years > 0 else f"{age_days}d"
+        mc_day = self.age // _MC_DAY_TICKS
+        mc_t   = (self.age % _MC_DAY_TICKS) * 24000 // _MC_DAY_TICKS
+        age_str = f"Day {mc_day}, T:{mc_t}"
         return (
             f"{self.__class__.__name__}({self.individual_name!r} [{self.name}], "
             f"age={age_str}, health={self.health:.1f}, energy={self.energy:.1f})"

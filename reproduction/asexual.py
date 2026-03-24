@@ -18,8 +18,8 @@ class AsexualReproduction(ReproductionStrategy):
     """
 
     def can_reproduce(self, organism) -> bool:
-        # 植物需生长至少 90 天（约 3 个月）才能分裂繁殖
-        return organism.energy > 70 and organism.age > 90
+        # 植物需生长至少 3 MC 天（600 ticks）才能分裂繁殖
+        return organism.energy > 70 and organism.age > 3 * 200
 
     def reproduce(self, organism, ecosystem) -> list:
         """

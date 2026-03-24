@@ -6,8 +6,8 @@ Pygame 可视化模拟器
 
 快捷键：
     Space       暂停 / 继续
-    +  / =      加速（最高 x16）
-    -           减速（最低 x1）
+    +  / =      加速（×1 / ×2 / ×4 / ×8 / ×16 / ×32）
+    -           减速
     R           重置模拟
     ESC / Q     退出
 """
@@ -26,6 +26,12 @@ from organisms.plant import Plant
 from organisms.herbivore import Herbivore
 from organisms.predator import Predator
 
+# ── Minecraft tick 常量 ──────────────────────────────────────────────────────
+MC_TPS        = 20           # Minecraft 标准：20 tick/秒
+MC_DAY_TICKS  = 200          # 1 MC day = 200 sim ticks（10 真实秒，与生物寿命尺度匹配）
+MC_NOON       = MC_DAY_TICKS // 4    # 昼夜中点：天顶
+MC_NIGHT_MID  = MC_DAY_TICKS * 3 // 4  # 夜晚中点
+
 # ── 画面常量 ──────────────────────────────────────────────────────────────────
 WORLD_W, WORLD_H = 100.0, 100.0   # 生态世界单位尺寸
 VIEW_W, VIEW_H   = 800, 800        # 世界视口像素尺寸
@@ -35,16 +41,58 @@ WIN_H            = VIEW_H
 SCALE_X          = VIEW_W / WORLD_W
 SCALE_Y          = VIEW_H / WORLD_H
 
-FPS = 60
-
 # ── 配色 ──────────────────────────────────────────────────────────────────────
-BG_COLOR      = (15,  20,  15)
 GRID_COLOR    = (30,  40,  30)
 PANEL_COLOR   = (20,  25,  20)
 BORDER_COLOR  = (60,  80,  60)
 WHITE         = (230, 230, 230)
 GRAY          = (130, 130, 130)
 DIM           = (70,  70,  70)
+
+# Minecraft 天空颜色关键帧（tod 比例 0.0-1.0）
+_SKY_KEYFRAMES = [
+    (0.00, (10,   15,  50)),   # 午夜
+    (0.20, (10,   15,  50)),   # 深夜
+    (0.23, (80,   40,  20)),   # 黎明红
+    (0.27, (140,  90,  50)),   # 日出橙
+    (0.32, ( 50, 120, 210)),   # 清晨蓝
+    (0.50, ( 25,  85, 190)),   # 正午蓝
+    (0.68, ( 50, 120, 210)),   # 下午蓝
+    (0.73, (140,  80,  40)),   # 日落橙
+    (0.77, ( 60,  20,  20)),   # 黄昏红
+    (0.80, ( 10,  15,  50)),   # 入夜
+    (1.00, ( 10,  15,  50)),   # 午夜
+]
+
+
+def _lerp(a: tuple, b: tuple, t: float) -> tuple:
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+def get_sky_color(tick: int) -> tuple:
+    """根据当前 sim tick 返回 Minecraft 风格天空颜色。"""
+    tod = (tick % MC_DAY_TICKS) / MC_DAY_TICKS
+    for i in range(len(_SKY_KEYFRAMES) - 1):
+        t0, c0 = _SKY_KEYFRAMES[i]
+        t1, c1 = _SKY_KEYFRAMES[i + 1]
+        if t0 <= tod <= t1:
+            frac = (tod - t0) / (t1 - t0) if t1 > t0 else 0.0
+            return _lerp(c0, c1, frac)
+    return _SKY_KEYFRAMES[0][1]
+
+
+def is_daytime(tick: int) -> bool:
+    """sim tick 对应 MC 白天（约 0.23-0.77）。"""
+    tod = (tick % MC_DAY_TICKS) / MC_DAY_TICKS
+    return 0.23 <= tod <= 0.77
+
+
+def mc_time_of_day(tick: int) -> int:
+    """将 sim tick 映射到 Minecraft 时刻 0-24000（6000=日出, 18000=日落）。"""
+    tod_ratio = (tick % MC_DAY_TICKS) / MC_DAY_TICKS   # 0-1
+    # Minecraft: 0=午夜, 6000=日出, 18000=日落, 24000=午夜
+    return int((tod_ratio * 24000 + 18000) % 24000)
+
 
 SPECIES_COLOR = {
     "Plant":     (60,  190,  60),
@@ -60,12 +108,12 @@ def world_to_screen(x: float, y: float) -> tuple[int, int]:
 
 def make_ecosystem() -> Ecosystem:
     eco = Ecosystem(world_size=(WORLD_W, WORLD_H))
-    eco.add_factor(TemperatureFactor(base_temp=20.0, amplitude=15.0, period=365))
+    eco.add_factor(TemperatureFactor(base_temp=20.0, amplitude=15.0, period=MC_DAY_TICKS * 20))
     eco.add_factor(FoodSupplyFactor(initial_food=500.0, regen_rate=30.0,
                                     max_food=800.0, consumption_per_animal=3.0,
                                     energy_penalty=3.0))
     eco.add_factor(WaterFactor(initial_level=200.0, regen_rate=8.0, max_level=400.0))
-    eco.add_factor(LightFactor(day_length=12, energy_gain=4.0, energy_loss=1.0))
+    eco.add_factor(LightFactor(day_length=MC_DAY_TICKS // 2, energy_gain=4.0, energy_loss=1.0))
     eco.add_factor(DiseaseFactor(infection_rate=0.02, damage=1.0, recovery_chance=0.2))
 
     for _ in range(14): eco.add_organism(Plant())
@@ -87,11 +135,40 @@ def make_ecosystem() -> Ecosystem:
 
 # ── 绘图工具 ──────────────────────────────────────────────────────────────────
 
-def draw_grid(surface: pygame.Surface) -> None:
+def draw_grid(surface: pygame.Surface, tick: int) -> None:
+    sky = get_sky_color(tick)
+    # 网格随天空亮度调整颜色
+    brightness = sum(sky) / 3
+    gc = tuple(max(15, min(80, int(brightness * 0.25))) for _ in range(3))
     for gx in range(0, VIEW_W, 50):
-        pygame.draw.line(surface, GRID_COLOR, (gx, 0), (gx, VIEW_H))
+        pygame.draw.line(surface, gc, (gx, 0), (gx, VIEW_H))
     for gy in range(0, VIEW_H, 50):
-        pygame.draw.line(surface, GRID_COLOR, (0, gy), (VIEW_W, gy))
+        pygame.draw.line(surface, gc, (0, gy), (VIEW_W, gy))
+
+
+def draw_sun_moon(surface: pygame.Surface, tick: int) -> None:
+    """在世界视口顶部绘制太阳或月亮弧线运动，仿 Minecraft 天空盒。"""
+    tod = (tick % MC_DAY_TICKS) / MC_DAY_TICKS  # 0.0 ~ 1.0
+    # 太阳：tod 0.23(日出) ~ 0.77(日落)，弧线从左升到右降
+    day_start, day_end = 0.23, 0.77
+    sky_h = 60  # 天空区域高度(px)
+    if day_start <= tod <= day_end:
+        progress = (tod - day_start) / (day_end - day_start)  # 0=日出, 1=日落
+        sx = int(progress * VIEW_W)
+        sy = int(sky_h - sky_h * math.sin(progress * math.pi))
+        pygame.draw.circle(surface, (255, 220, 50), (sx, sy), 14)
+        pygame.draw.circle(surface, (255, 240, 120), (sx, sy), 10)
+    else:
+        # 月亮：tod 继续 0.77→1.0→0.23
+        if tod > day_end:
+            night_prog = (tod - day_end) / (1.0 - day_end + day_start)
+        else:
+            night_prog = (tod + 1.0 - day_end) / (1.0 - day_end + day_start)
+        night_prog = min(1.0, max(0.0, night_prog))
+        sx = int(night_prog * VIEW_W)
+        sy = int(sky_h - sky_h * math.sin(night_prog * math.pi))
+        pygame.draw.circle(surface, (200, 200, 220), (sx, sy), 10)
+        pygame.draw.circle(surface, (230, 230, 240), (sx, sy), 7)
 
 
 def draw_organism(surface: pygame.Surface, org) -> None:
@@ -119,29 +196,38 @@ def draw_organism(surface: pygame.Surface, org) -> None:
 
 def draw_hud(surface: pygame.Surface, font_big, font_med, font_sm,
              eco: Ecosystem, paused: bool, speed_mul: int) -> None:
-    ox = VIEW_W + 10  # HUD 左边距（相对整个窗口）
+    ox = VIEW_W + 10
     y = 10
     status = eco.status()
     species = status["species"]
+    tick = status["tick"]
 
-    # ── 标题 ──
+    # ── Minecraft 标题 ──
     title = font_big.render("Ecosystem", True, (100, 200, 100))
-    surface.blit(title, (ox, y)); y += 34
+    surface.blit(title, (ox, y)); y += 26
+    mc_title = font_sm.render("Minecraft Tick Mode", True, (80, 200, 80))
+    surface.blit(mc_title, (ox, y)); y += 22
 
-    # ── Tick / 状态 ──
-    year = status['tick'] // 365
-    day  = status['tick'] % 365
-    txt = font_med.render(f"Year  {year:>4}", True, WHITE)
+    # ── MC 时钟 ──
+    mc_day  = tick // MC_DAY_TICKS
+    mc_time = mc_time_of_day(tick)
+    mc_h    = mc_time * 24 // 24000
+    mc_m    = (mc_time % 1000) * 60 // 1000
+    day_icon = "☀" if is_daytime(tick) else "☾"
+    txt = font_med.render(f"Day   {mc_day:>5}  {day_icon}", True, (255, 220, 80) if is_daytime(tick) else (160, 160, 220))
     surface.blit(txt, (ox, y)); y += 22
-    txt = font_med.render(f"Day   {day:>4}", True, WHITE)
+    txt = font_med.render(f"Time  {mc_h:02d}:{mc_m:02d}  T:{mc_time:>5}", True, GRAY)
+    surface.blit(txt, (ox, y)); y += 22
+    txt = font_med.render(f"Tick  {tick:>7}", True, GRAY)
     surface.blit(txt, (ox, y)); y += 22
     txt = font_med.render(f"Total {status['total']:>5}", True, WHITE)
     surface.blit(txt, (ox, y)); y += 22
 
+    tps_actual = speed_mul * MC_TPS
     state_col = (255, 200, 0) if paused else (100, 230, 100)
-    state_str = "PAUSED" if paused else f"x{speed_mul}"
-    txt = font_med.render(f"Speed  {state_str}", True, state_col)
-    surface.blit(txt, (ox, y)); y += 30
+    state_str = "PAUSED" if paused else f"x{speed_mul}  ({tps_actual}t/s)"
+    txt = font_sm.render(state_str, True, state_col)
+    surface.blit(txt, (ox, y)); y += 26
 
     # ── 物种统计 ──
     pygame.draw.line(surface, BORDER_COLOR, (ox, y), (ox + PANEL_W - 20, y)); y += 8
@@ -192,7 +278,7 @@ def draw_hud(surface: pygame.Surface, font_big, font_med, font_sm,
 def main() -> None:
     pygame.init()
     screen = pygame.display.set_mode((WIN_W, WIN_H))
-    pygame.display.set_caption("🌿 Ecosystem Simulation")
+    pygame.display.set_caption("Ecosystem Simulation — Minecraft Tick")
     clock = pygame.time.Clock()
 
     try:
@@ -206,11 +292,15 @@ def main() -> None:
     world_surf = pygame.Surface((VIEW_W, VIEW_H))
 
     eco = make_ecosystem()
-    paused = False
-    speed_mul = 1   # 每帧执行多少步模拟
+    paused    = False
+    speed_mul = 1    # 每帧执行多少 sim tick（×1=20TPS, ×2=40TPS, …, ×32=640TPS）
+    SPEED_LEVELS = [1, 2, 4, 8, 16, 32]
 
     running = True
     while running:
+        # ── Minecraft 固定 20TPS 时钟（每帧 = 1 tick 基准）──
+        clock.tick(MC_TPS)
+
         # ── 事件处理 ──
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -221,33 +311,42 @@ def main() -> None:
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                 elif event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
-                    speed_mul = min(speed_mul * 2, 16)
+                    idx = SPEED_LEVELS.index(speed_mul) if speed_mul in SPEED_LEVELS else 0
+                    speed_mul = SPEED_LEVELS[min(idx + 1, len(SPEED_LEVELS) - 1)]
                 elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
-                    speed_mul = max(speed_mul // 2, 1)
+                    idx = SPEED_LEVELS.index(speed_mul) if speed_mul in SPEED_LEVELS else 0
+                    speed_mul = SPEED_LEVELS[max(idx - 1, 0)]
                 elif event.key == pygame.K_r:
                     eco = make_ecosystem()
 
-        # ── 模拟步进 ──
+        # ── 模拟步进（每帧推进 speed_mul 个 tick）──
         if not paused:
             for _ in range(speed_mul):
                 eco.step()
 
-        # ── 绘制世界视口 ──
-        world_surf.fill(BG_COLOR)
-        draw_grid(world_surf)
+        # ── 天空背景 ──
+        sky_color = get_sky_color(eco.tick)
+        world_surf.fill(sky_color)
+
+        # ── 太阳/月亮 ──
+        draw_sun_moon(world_surf, eco.tick)
+
+        # ── 网格 & 生物 ──
+        draw_grid(world_surf, eco.tick)
         for org in eco.organisms:
             draw_organism(world_surf, org)
 
         # ── 合成到屏幕 ──
         screen.fill(PANEL_COLOR)
         screen.blit(world_surf, (0, 0))
-        # 视口边框
-        pygame.draw.rect(screen, BORDER_COLOR, (0, 0, VIEW_W, VIEW_H), 1)
+        # 视口边框（夜晚时变蓝色调）
+        border_col = (40, 60, 120) if not is_daytime(eco.tick) else BORDER_COLOR
+        pygame.draw.rect(screen, border_col, (0, 0, VIEW_W, VIEW_H), 1)
 
         draw_hud(screen, font_big, font_med, font_sm, eco, paused, speed_mul)
 
         pygame.display.flip()
-        clock.tick(FPS)
+        # 不再调用 clock.tick(FPS)，已在循环顶部 clock.tick(MC_TPS) 控制帧率
 
     pygame.quit()
     sys.exit(0)
