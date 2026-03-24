@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from core.ecosystem import Ecosystem
 
 from intelligence.no_brain import NoBrain
+from core import name_registry as _name_registry
 
 
 class Organism:
@@ -30,6 +31,7 @@ class Organism:
         traits: dict | None = None,
         brain=None,
         speed: float = 0.0,
+        individual_name: str | None = None,
     ):
         """
         初始化生物实例。
@@ -45,6 +47,7 @@ class Organism:
             speed: 每步最大移动距离（植物=0，草食=2，捕食者=3）
         """
         self.name: str = name
+        self.individual_name: str = individual_name if individual_name is not None else _name_registry.generate(name)
         self.age: int = 0
         self.health: float = max(0.0, min(100.0, health))
         self.energy: float = max(0.0, min(100.0, energy))
@@ -298,7 +301,10 @@ class Organism:
     # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
+        age_years = self.age // 365
+        age_days  = self.age % 365
+        age_str   = f"{age_years}y{age_days}d" if age_years > 0 else f"{age_days}d"
         return (
-            f"{self.__class__.__name__}(name={self.name!r}, "
-            f"age={self.age}, health={self.health:.1f}, energy={self.energy:.1f})"
+            f"{self.__class__.__name__}({self.individual_name!r} [{self.name}], "
+            f"age={age_str}, health={self.health:.1f}, energy={self.energy:.1f})"
         )

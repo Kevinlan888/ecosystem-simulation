@@ -13,21 +13,19 @@ class SexualReproduction(ReproductionStrategy):
     """
     有性繁殖策略。
 
-    条件：能量 > 50 且年龄 > 5，且生态系统中存在同类伙伴。
+    条件：能量 > 50 且年龄 > min_age（天），且生态系统中存在同类伙伴。
     结果：生成一个后代（traits 取双亲平均），双亲各消耗 20 点能量。
     """
 
-    def can_reproduce(self, organism) -> bool:
+    def __init__(self, min_age: int = 365):
         """
-        判断是否满足有性繁殖条件（不检查伙伴，伙伴在 reproduce 中查找）。
-
         Args:
-            organism: 待判断的生物实例
-
-        Returns:
-            bool: 能量 > 50 且年龄 > 5
+            min_age: 繁殖所需最低年龄（天）。草食动物默认 365（1 年），捕食者建议 730（2 年）。
         """
-        return organism.energy > 50 and organism.age > 5
+        self.min_age = min_age
+
+    def can_reproduce(self, organism) -> bool:
+        return organism.energy > 50 and organism.age > self.min_age
 
     def reproduce(self, organism, ecosystem) -> list:
         """
@@ -49,7 +47,7 @@ class SexualReproduction(ReproductionStrategy):
                 and o.name == organism.name
                 and o.is_alive()
                 and o.energy > 50
-                and o.age > 5
+                and o.age > self.min_age
             ),
             None,
         )
@@ -93,7 +91,7 @@ class SexualReproduction(ReproductionStrategy):
             health=60.0,
             energy=50.0,
             max_age=organism.max_age,
-            reproduction_strategy=SexualReproduction(),
+            reproduction_strategy=SexualReproduction(min_age=self.min_age),
             traits=offspring_traits,
         )
         return [offspring]

@@ -24,7 +24,7 @@ class Predator(Organism):
         name: str = "Predator",
         health: float = 90.0,
         energy: float = 80.0,
-        max_age: int = 50,
+        max_age: int = 15 * 365,  # 捕食者寿命约 15 年
         reproduction_strategy=None,
         traits: dict | None = None,
         hunt_energy_gain: float = 30.0,
@@ -50,7 +50,7 @@ class Predator(Organism):
             health=health,
             energy=energy,
             max_age=max_age,
-            reproduction_strategy=reproduction_strategy or SexualReproduction(),
+            reproduction_strategy=reproduction_strategy or SexualReproduction(min_age=730),
             traits=traits or {
                 "min_temp": -5,
                 "max_temp": 40,

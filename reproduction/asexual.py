@@ -18,16 +18,8 @@ class AsexualReproduction(ReproductionStrategy):
     """
 
     def can_reproduce(self, organism) -> bool:
-        """
-        判断是否满足无性繁殖条件。
-
-        Args:
-            organism: 待判断的生物实例
-
-        Returns:
-            bool: 能量 > 70 且年龄 > 3
-        """
-        return organism.energy > 70 and organism.age > 3
+        # 植物需生长至少 90 天（约 3 个月）才能分裂繁殖
+        return organism.energy > 70 and organism.age > 90
 
     def reproduce(self, organism, ecosystem) -> list:
         """

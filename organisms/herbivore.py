@@ -27,7 +27,7 @@ class Herbivore(Organism):
         name: str = "Herbivore",
         health: float = 100.0,
         energy: float = 85.0,
-        max_age: int = 55,
+        max_age: int = 8 * 365,   # 草食动物寿命约 8 年
         reproduction_strategy=None,
         traits: dict | None = None,
         brain=None,
@@ -49,7 +49,7 @@ class Herbivore(Organism):
             health=health,
             energy=energy,
             max_age=max_age,
-            reproduction_strategy=reproduction_strategy or SexualReproduction(),
+            reproduction_strategy=reproduction_strategy or SexualReproduction(min_age=365),
             traits=traits or {
                 "min_temp": 0,
                 "max_temp": 35,

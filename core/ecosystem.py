@@ -19,7 +19,7 @@ class Ecosystem:
     负责协调所有生物和环境因素，驱动时间步进。
     """
 
-    def __init__(self, evolve_interval: int = 20, world_size: tuple = (100.0, 100.0)):
+    def __init__(self, evolve_interval: int = 90, world_size: tuple = (100.0, 100.0)):
         """
         初始化一个空的生态系统。
 

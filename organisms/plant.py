@@ -22,7 +22,7 @@ class Plant(Organism):
         name: str = "Plant",
         health: float = 80.0,
         energy: float = 60.0,
-        max_age: int = 30,
+        max_age: int = 3 * 365,   # 植物寿命约 3 年
         reproduction_strategy=None,
         traits: dict | None = None,
     ):

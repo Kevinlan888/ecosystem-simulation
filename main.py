@@ -12,6 +12,8 @@
 
 import time
 
+DAYS_PER_YEAR = 365
+
 from core.ecosystem import Ecosystem
 from factors.temperature import TemperatureFactor
 from factors.food_supply import FoodSupplyFactor
@@ -33,17 +35,19 @@ def make_tick_handler(eco):
         tick = status["tick"]
         total = status["total"]
         species = status["species"]
+        year = tick // DAYS_PER_YEAR
+        day  = tick % DAYS_PER_YEAR
         species_str = ", ".join(f"{k}: {v}" for k, v in sorted(species.items()))
-        print(f"[Tick {tick:>3}] 总生物数: {total:>4} | {species_str}")
+        print(f"[Year {year:>3} Day {day:>3}] 总生物数: {total:>4} | {species_str}")
 
-        # 检测种群显著变化事件（跳过第一个 tick，prev 为空无意义）
+        # 检测种群显著变化事件
         if prev_species:
             all_names = set(prev_species) | set(species)
             for name in all_names:
                 prev = prev_species.get(name, 0)
                 curr = species.get(name, 0)
                 if prev > 0 and curr == 0:
-                    print(f"  ⚠️  [灭绝] {name} 在 Tick {tick} 全部死亡！")
+                    print(f"  ⚠️  [灭绝] {name} 于 Year {year} Day {day} 全部死亡！")
                 elif prev == 0 and curr > 0:
                     print(f"  🌱 [复苏] {name} 重新出现，当前数量: {curr}")
                 elif prev > 0 and curr <= prev * 0.4:
@@ -92,7 +96,7 @@ def main():
     eco = Ecosystem()
 
     # 2. 添加环境因素
-    eco.add_factor(TemperatureFactor(base_temp=20.0, amplitude=15.0, period=40))
+    eco.add_factor(TemperatureFactor(base_temp=20.0, amplitude=15.0, period=365))
     eco.add_factor(FoodSupplyFactor(initial_food=500.0, regen_rate=30.0, max_food=800.0, consumption_per_animal=3.0, energy_penalty=3.0))
     eco.add_factor(WaterFactor(initial_level=200.0, regen_rate=8.0, max_level=400.0))
     eco.add_factor(LightFactor(day_length=12, energy_gain=4.0, energy_loss=1.0))
@@ -112,6 +116,20 @@ def main():
     # 4. 订阅事件
     eco.event_bus.subscribe("tick_end", make_tick_handler(eco))
     eco.event_bus.subscribe("evolution_occurred", make_evolution_handler(eco))
+
+    def on_organism_died(event_name: str, data: dict) -> None:
+        """追踪捕食者个体死亡（数量少，有意义打印）。"""
+        org  = data["organism"]
+        tick = data.get("tick", eco.tick)
+        if not org.traits.get("is_predator", False):
+            return
+        year = tick // DAYS_PER_YEAR
+        day  = tick % DAYS_PER_YEAR
+        age_y = org.age // DAYS_PER_YEAR
+        age_d = org.age % DAYS_PER_YEAR
+        age_str = f"{age_y}年{age_d}天" if age_y > 0 else f"{age_d}天"
+        print(f"  💀 [Predator] {org.individual_name} 死亡 (Year {year} Day {day}, 享年 {age_str})")
+    eco.event_bus.subscribe("organism_died", on_organism_died)
 
     # 5. 无限运行，直到 Ctrl+C
     print("按 Ctrl+C 停止模拟...\n")
